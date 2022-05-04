@@ -1,3 +1,4 @@
+import rclpy
 from __init__ import *
 from evaluation.experiment_gen_base.exec_sim import SimExec
 
@@ -10,7 +11,8 @@ def test_exec_sim():
     sim_exec = SimExec(container)
     fetch_sample_trial.requests[0].task.attributes['max_time'] = 5*60
 
-    final_state = sim_exec.run(fetch_sample_trial, limit_ms=10000)
+    rclpy.init()
+    final_state = sim_exec.run(fetch_sample_trial, limit_s=2)
     # inspect end state
     print(final_state['missions'][0].occurances)
     # prep exec sim

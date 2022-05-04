@@ -1,7 +1,8 @@
-from deeco.core import Component, ComponentRole, BaseKnowledge
+from mini_deeco.knowledge import BaseKnowledge
+from mini_deeco.component import Component
 
 # Roles
-class RequestsHandler(ComponentRole):
+class RequestsHandler():
     __curr_requests_ids = None
 
     def __init__(self):

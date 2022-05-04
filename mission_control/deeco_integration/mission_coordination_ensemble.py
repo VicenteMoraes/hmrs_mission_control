@@ -7,10 +7,12 @@ from .coordinator import MissionCoordinator
 
 from ..core import MissionContext, LocalMission
 
+
 # Role
 class MissionContextRole(ComponentRole, MissionContext):
 	def __init__(self):
 		super().__init__()
+
 
 class MissionCoordinationEnsemble(EnsembleDefinition):
 	class MissionKnowledge(BaseKnowledge, MissionContextRole, Group):
@@ -50,7 +52,6 @@ class MissionCoordinationEnsemble(EnsembleDefinition):
 			exchanges_coord_member.append(set_local_mission)
 		return (coord, exchanges_coord_member)
 
-
 	@staticmethod
 	def get_mission_member_is_assigned(coord: MissionCoordinator, member: Worker):
 		if not member.local_mission:
@@ -76,6 +77,5 @@ class MissionCoordinationEnsemble(EnsembleDefinition):
 	def is_not_committed(member: Worker):
 		return member.local_mission is None
 	
-
 	def __str__(self):
 		return self.__class__.__name__

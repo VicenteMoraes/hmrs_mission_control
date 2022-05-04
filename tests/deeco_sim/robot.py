@@ -1,3 +1,4 @@
+import pee
 from random import Random
 
 from deeco.core import BaseKnowledge

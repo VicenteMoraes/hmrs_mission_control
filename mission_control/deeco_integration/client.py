@@ -1,8 +1,8 @@
+from mini_deeco.knowledge import BaseKnowledge
+from mini_deeco.component import Component
+from mini_deeco.deeco import Simulation
 
-from deeco.core import BaseKnowledge, ComponentRole, Component, Node
-
-
-class MissionClient(ComponentRole):
+class MissionClient():
     def __init__(self):
         super().__init__()
         self.requests = []
@@ -16,20 +16,8 @@ class Client(Component):
 			super().__init__()
 
 	# Component initialization
-	def __init__(self, node: Node, provided_skills = []):
-		super().__init__(node)
-		node.register_handler(self.add_request)
-		
-
-		# Initialize knowledge
-
-#		# Register network receive method
-#		node.networkDevice.add_receiver(self.__receive_packet)
-
-		print("User " + str(self.knowledge.id) + " created")
-
-#	def __receive_packet(self, packet):
-#		print((str(self.knowledge.time) + " ms: " + str(self.knowledge.id) + " Received packet: " + str(packet)))
+	def __init__(self, sim: Simulation, name: str = "", frequency: float = 0):
+		super(Client, self).__init__(sim=sim, name=name, frequency=frequency)
 
 	# Processes follow
 	def add_request(self, request):
