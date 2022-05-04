@@ -1,19 +1,18 @@
 from random import Random
 from typing import List
-
-from deeco.core import BaseKnowledge
-from deeco.core import Component
-from deeco.core import Node
-from deeco.core import ComponentRole
-from deeco.core import process
-from deeco.position import Position
+from mini_deeco.deeco import Simulation
+from mini_deeco.knowledge import BaseKnowledge
+from mini_deeco.component import Component
+#from deeco.core import Node
+#from deeco.core import process
+from mini_deeco.position import Position
 
 from mission_control.core import Battery, LocalMission, POI
 
+
 # Roles
-class Worker(ComponentRole):
+class Worker():
 	def __init__(self):
-		super().__init__()
 		self.name = None
 		self.skills = None
 		self.local_mission: LocalMission = None
@@ -26,15 +25,16 @@ class Worker(ComponentRole):
 class Robot(Component):
 	@staticmethod
 	def gen_position():
-		return Position(Robot.random.uniform(0, 1), Robot.random.uniform(0, 1))
+		return Position(x=Robot.random.uniform(0, 1), y=Robot.random.uniform(0, 1))
 
 	# Knowledge definition
 	class Knowledge(BaseKnowledge, Worker):
 		pass
 
 	# Component initialization
-	def __init__(self,node: Node = None,
-				name: str = None,
+	def __init__(self, sim: Simulation,
+				name: str = "",
+				frequency: float = 0,
 				skills: List[str] = None,
 				location: POI = None,
 				battery: Battery = None,
@@ -43,10 +43,9 @@ class Robot(Component):
 				avg_speed = 0, 
 				id = 0):
 
-		super().__init__(node)
+		super().__init__(sim=sim, name=name, frequency=frequency)
 
 		# Initialize knowledge
-		self.name = name
 		self.knowledge.name = name
 		self.knowledge.skills = skills
 		self.knowledge.location = location
@@ -56,22 +55,16 @@ class Robot(Component):
 		self.knowledge.avg_speed = avg_speed
 
 		print("Robot " + str(self.name) + " created")
-	
-	# Processes follow
-	@process(period_ms=10)
-	def update_time(self, node: Node):
-		self.knowledge.time = node.runtime.scheduler.get_time_ms()
-		
-	@process(period_ms=1000)
-	def sequencing(self, node: Node):
+
+		self.ros_node.create_timer(1, self.sequencing)
+
+	def sequencing(self):
 		if self.knowledge.local_mission:
 			print(self.knowledge.local_mission)
 
-
-	@process(period_ms=10)
-	def sense_task_execution_status(self, node: Node):
-		pass
-		# TODO 
+	#def sense_task_execution_status(self, node: Node):
+	#	pass
+	#	TODO
 
 	# @process(period_ms=100)
 	# def sense_position(self, node: Node):

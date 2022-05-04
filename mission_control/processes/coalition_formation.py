@@ -1,13 +1,14 @@
 
 from mission_control.mission.ihtn import TaskStatus, transverse_ihtn_apply_for_task
 from typing import Generator, Dict, List, Sequence
-from utils.logger import ContextualLogger, Logger
 
 from mission_control.mission.ihtn import Assignment, ElementaryTask, Task
 from mission_control.mission.planning import distribute, flat_plan
 from .integration import MissionHandler, MissionUnnexpectedError
 from ..core import MissionContext, MissionStatus, Worker, LocalMission, Role
 from ..estimate.estimate import EstimationManager, Bid
+
+from mini_deeco.deeco import Simulation
 
 
 def coalitionFormationError(e, mission_context):
@@ -20,41 +21,38 @@ class CoalitionFormationProcess:
     """ Service of creating coalitions. It receives an ihtn with tasks 
     assigned to roles an return a selection of robots to execute the plan """
 
-    def __init__(self, estimate_manager: EstimationManager, cl: ContextualLogger):
+    def __init__(self, estimate_manager: EstimationManager):
         self.individual_plans = []
         self.estimate_manager: EstimationManager = estimate_manager
-        self.cl = cl
-        self.l: Logger = cl.get_logger('cf_process')
+        self.sim = None
         
-
-    def run(self, mission_context: MissionContext, workers: List[Worker], mission_handler: MissionHandler):
+    def run(self, mission_context: MissionContext, workers: List[Worker], coordinator):
         #try:
-        self.do_run(mission_context, workers, mission_handler)
+        self.do_run(mission_context, workers, coordinator)
         # except Exception as e:
         #   if policy == try handle unnexected error
         #     mission_handler.handle_unnexpected_error(coalitionFormationError(e, mission_context))
         #   else:
         #     raise e
-    def do_run(self, mission_context: MissionContext, workers: List[Worker], mission_handler: MissionHandler):
+
+    def do_run(self, mission_context: MissionContext, workers: List[Worker], coordinator):
         if mission_context.status == MissionStatus.NEW:
             mission_context.local_missions = list(self.initialize_local_missions(mission_context))
             mission_context.status = MissionStatus.IN_PROGRESS
-            mission_handler.start_mission(mission_context)
+            coordinator.start_mission(mission_context)
 
         is_success = self.create_coalition(mission_context, workers)
         if is_success:
-            mission_handler.update_assigments(mission_context)
+            coordinator.update_assigments(mission_context)
         else:
-            # its all or northing - or assign all pending tasks or none
-            mission_handler.no_coalition_available(mission_context)
+            # it's all or nothing - or assign all pending tasks or none
+            coordinator.no_coalition_available(mission_context)
 
     def create_coalition(self, mission_context: MissionContext, workers: List[Worker]) -> bool:
-        self.l = self.cl.get_logger(f'cf_request_{mission_context.request_id}')
         plan_rank_map = {}
         for local_mission in self.get_pending_assignments(mission_context):
             mission_context.occurances.append(f'evaluating local mission for {local_mission.role}')
             task_list = self.flat_plan(local_mission.plan)
-            self.l.log(task_list, entity='local_mission')
             bids = []
             candidates = self.get_compatible_workers(task_list, workers)
             for worker in candidates:
@@ -62,7 +60,6 @@ class CoalitionFormationProcess:
                 bid = self.estimate(worker, task_list)
                 is_viable = self.check_viable(bid, mission_context)
                 mission_context.occurances.append(f'evaluating robot {worker.uuid}: bid is viable:{is_viable}')
-                self.l.log(bid, entity='bid')
                 if is_viable:
                     bids.append(bid)
                 else:
@@ -72,12 +69,10 @@ class CoalitionFormationProcess:
                 mission_context.occurances.append(f'no viable assignment for {local_mission.role}')
                 return False
             rank = self.rank_bids(bids)
-            self.l.log(rank, entity='rank')
             plan_rank_map[local_mission] = rank
             local_mission.bids = rank
 
-        selected_bids =  self.select_bids(plan_rank_map)
-        self.l.log_each_in_map(selected_bids, entity='selected_bid')
+        selected_bids = self.select_bids(plan_rank_map)
         self.set_assignment_from_selected_bids(mission_context, selected_bids)
         return True
 
@@ -92,7 +87,7 @@ class CoalitionFormationProcess:
             local_mission = distribute(mission_context.global_plan, role)
             lm = LocalMission(local_plan=local_mission, role=role, global_mission = mission_context)
             if role.type == Role.Type.NOT_MANAGED:
-                lm.assignment_status =  LocalMission.AssignmentStatus.NOT_MANAGED
+                lm.assignment_status = LocalMission.AssignmentStatus.NOT_MANAGED
             yield lm
         return
 

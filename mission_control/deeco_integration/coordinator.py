@@ -1,11 +1,15 @@
-import copy
+import rclpy
+from queue import Queue
 
-from deeco.plugins.ensemblereactor import EnsembleMember
+#from deeco.plugins.ensemblereactor import EnsembleMember
 from mission_control.common_descriptors.navigation_sd import Move
 from typing import List, Mapping
 
-from deeco.core import BaseKnowledge, Component, ComponentRole, Node, UUID
-from deeco.core import process
+from mini_deeco.knowledge import BaseKnowledge
+from mini_deeco.component import Component
+from mini_deeco.deeco import UUID, Simulation
+#from deeco.core import BaseKnowledge, Component, ComponentRole, Node, UUID
+#from deeco.core import process
 
 from ..core import BatteryTimeConstantDischarge, LocalMission, MissionContext, Worker
 from ..processes.integration import MissionHandler, MissionUnnexpectedError
@@ -13,41 +17,49 @@ from ..processes.coalition_formation import CoalitionFormationProcess
 from ..processes.supervision import SupervisionProcess
 
 
-class MissionCoordinator(ComponentRole):
+class MissionCoordinator:
     def __init__(self):
         self.missions: List[MissionContext] = []
         self.active_workers: dict[UUID, Worker] = {}
     
-    def update_worker(self, member: EnsembleMember[Worker]):
+    def update_worker(self, member: Worker):
         self.active_workers[member.uuid] = member.knowledge
 
 
-class Coordinator(Component, MissionHandler):
+class Coordinator(Component):
     # Knowledge definition
     class Knowledge(MissionCoordinator, BaseKnowledge):
-        pass
+        def __init__(self):
+            super(Coordinator.Knowledge, self).__init__()
 
     # Component initialization
-    def __init__(self, node: Node= None, 
-            required_skills = None,
-            cf_process: CoalitionFormationProcess = None,
-            supervision_proces: SupervisionProcess = None,
-            name = None):
-        super().__init__(node)
+    def __init__(self, sim: Simulation,
+                 name: str = "",
+                 server_name: str = "",
+                 frequency: float = 0,
+                 required_skills=None,
+                 cf_process: CoalitionFormationProcess = None,
+                 supervision_process: SupervisionProcess = None,
+                 requests: List = None):
+        super(Coordinator, self).__init__(sim=sim, name=name, server_name=server_name, frequency=frequency)
         self.cf_process = cf_process
-        self.supervision_process = supervision_proces
+        self.supervision_process = supervision_process
         self.name = name
+        self.knowledge = self.Knowledge()
+        self.requests = Queue()
+        if requests is not None:
+            self.add_requests(requests)
 
         # Initialize knowledge
 
         print("Coordinator " + str(self.name) + " created")
+        self.ros_node.create_timer(1, self.coalition_formation)
 
-    @process(period_ms=10)
-    def update_time(self, node: Node):
-        self.knowledge.time = node.runtime.scheduler.get_time_ms()
+    def add_requests(self, requests):
+        for request in requests:
+            self.requests.put(request)
 
-    @process(period_ms=1000)
-    def coalition_formation(self, node: Node):
+    def coalition_formation(self):
         for mission_context in list(self.get_missions_with_pending_assignments()):
             workers = list(map(self.transform_worker, self.get_free_workers().items()))
             self.cf_process.run(mission_context, workers, self)
@@ -63,14 +75,14 @@ class Coordinator(Component, MissionHandler):
         return
 
     @staticmethod
-    def has_pending_assignment(mission_context:MissionContext):
+    def has_pending_assignment(mission_context: MissionContext):
         return any(filter(lambda lm: lm.assignment_status == LocalMission.AssignmentStatus.NOT_ASSIGNED, mission_context.local_missions))
 
     def handle_requests(self):
-        while self.node.requests_queue:
-            request = self.node.requests_queue.pop(0)
+        while not self.requests.empty():
+            request = self.requests.get()
             mission_context = MissionContext(request_id = request.id, global_plan=request.task)
-            print(f'coordinator {self.uuid} got has a new mission {mission_context}')
+            print(f'coordinator {self._uuid} got has a new mission {mission_context}')
             self.knowledge.missions.append(mission_context)
             yield mission_context
         return
@@ -81,7 +93,7 @@ class Coordinator(Component, MissionHandler):
     def update_assigments(self, mission_context: MissionContext):
         print(f'received an update for {mission_context}')
     
-    def no_coalition_availabel(self, mission_context: MissionContext):
+    def no_coalition_available(self, mission_context: MissionContext):
         print(f'no coalition available for {mission_context}')
     
     # @process(period_ms=1000)
@@ -132,9 +144,9 @@ class Coordinator(Component, MissionHandler):
             capabilities=[
                 Move(avg_speed = worker_knowledge.avg_speed, u='m/s')
             ],
-            resources = [
+            resources=[
                 BatteryTimeConstantDischarge(
-                    battery = worker_knowledge.battery,
+                    battery=worker_knowledge.battery,
                     discharge_rate=worker_knowledge.battery_discharge_rate,
                     minimum_useful_level=0.05
                 )

@@ -1,14 +1,8 @@
-
-
+import rclpy
 from lagom import Container
 
 from mission_control.core import Battery
-from deeco.core import Node
-from deeco.sim import Sim
-from deeco.plugins.identity_replicas import IdentityReplicas
-from deeco.plugins.simplenetwork import SimpleNetwork
-from deeco.plugins.knowledgepublisher import KnowledgePublisher
-from deeco.plugins.ensemblereactor import EnsembleReactor
+from mini_deeco.deeco import Simulation
 
 from utils.logger import ContextualLogger
 from utils.timer import Timer
@@ -34,15 +28,12 @@ class SimExec:
         self.cl = container[ContextualLogger]
 
     @staticmethod
-    def instantiate_robot_component(node, battery_charge, **initial_knowledge):
-         return Robot(node=node,
-            battery = Battery(
-                capacity = 1,
-				charge = battery_charge
-                ),
-            **initial_knowledge)
+    def instantiate_robot_component(sim: Simulation, battery_charge, **initial_knowledge):
+        return Robot(sim=sim,
+                     battery=Battery(capacity=1, charge=battery_charge),
+                     **initial_knowledge)
 
-    def run(self, scenario: Scenario, limit_ms=5000):
+    def run(self, scenario: Scenario, limit_s=5):
         print(f'init scenario {scenario.code}')
         self.cl.start_group_context(f'{scenario.code}')
         requests = scenario.requests
@@ -50,48 +41,41 @@ class SimExec:
         
         cf_process = self.cf_process
 
-        sim = Sim()
+        sim = Simulation(limit_s, name=f"{scenario.code}")
 
         # Add identity replicas plugin (provides replicas using deep copies of original knowledge)
-        IdentityReplicas(sim)
+        #IdentityReplicas(sim)
 
         # Add simple network device
-        SimpleNetwork(sim)
+        #SimpleNetwork(sim)
         
         # wire sim timer with container timer
-        timer:DeecoTimer = container[Timer]
-        timer.scheduler = sim.scheduler
+        #timer:DeecoTimer = container[Timer]
+        #timer.scheduler = sim.scheduler
 
         # create coordinator
-        coord_node = Node(sim)        
+        #coord_node = Node(sim)
         # node plugins
-        KnowledgePublisher(coord_node)
-        RequestsQueue(coord_node, requests)
-        EnsembleReactor(coord_node, [ MissionCoordinationEnsemble() ])
+        #KnowledgePublisher(coord_node)
+        #RequestsQueue(coord_node, requests)
+        #EnsembleReactor(coord_node, [ MissionCoordinationEnsemble() ])
 
         # mission coordinator component
-        coord = Coordinator(coord_node, name='mission_coordinator', required_skills=[], cf_process=cf_process)
-        coord_node.add_component(coord)
+        coord = Coordinator(sim=sim, name='mission_coordinator', required_skills=[], cf_process=cf_process,
+                            requests=requests)
 
-        robots, robots_nodes = [], []
+        robots = []
 
 
         # instantiate workers
         for r in robots_initial_conf:
-            
-            node = Node(sim)
-            robot = self.instantiate_robot_component(node, **r)
-            node.add_component(robot)
-            # node plugins
-            KnowledgePublisher(node)
-            EnsembleReactor(node, [ MissionCoordinationEnsemble() ])
-
+            robot = self.instantiate_robot_component(sim, **r)
             # save to report
-            robots_nodes.append(node)
             robots.append(robot)
 
         # Run the simulation
-        sim.run(limit_ms)
+        #sim.run(limit_ms)
+        sim.start()
         self.cl.end_all_contexts()
 
         # get results
@@ -101,10 +85,6 @@ class SimExec:
             robot['local_plan'] = local_plan
         
         return {
-            'nodes': {
-                'coord_node': coord_node,
-                'robots': robots_nodes
-            },
             'components': {
                 'coordinator': coord.knowledge,
                 'robots': list(map(lambda r : r.knowledge, robots))
@@ -112,5 +92,3 @@ class SimExec:
             'local_plans': local_plans,
             'missions': coord.knowledge.missions
         }
-
-

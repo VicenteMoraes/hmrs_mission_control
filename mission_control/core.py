@@ -1,5 +1,5 @@
 from utils.to_string import obj_to_string
-from deeco.core import Identifiable
+from mini_deeco.deeco import Identifiable
 import math
 
 

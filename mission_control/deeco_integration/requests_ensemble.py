@@ -1,8 +1,10 @@
-from deeco.core import EnsembleDefinition, BaseKnowledge, ComponentRole
+from mini_deeco.knowledge import BaseKnowledge
+from deeco.core import EnsembleDefinition
 from deeco.packets import Packet, PacketType
 
 from .client import MissionClient
 from .requests_server_component import RequestsHandler
+
 
 class RequestPacket(Packet):
     def __init__(self, id, timestamp = None, content=None):
@@ -11,7 +13,8 @@ class RequestPacket(Packet):
         self.timestamp = timestamp
         self.content = content
 
-class MissionRequestsRole(ComponentRole):
+
+class MissionRequestsRole():
     def __init__(self):
         self.requests = []
 
